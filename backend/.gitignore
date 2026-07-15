@@ -1,0 +1,39 @@
+# ===== ENVIRONMENT FILES — NEVER COMMIT =====
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# ===== DEPENDENCIES =====
+node_modules/
+
+# ===== BUILD OUTPUT — auto-generated, never commit =====
+dist/
+build/
+
+# ===== PRISMA GENERATED =====
+node_modules/.prisma/
+
+# ===== LOGS =====
+*.log
+npm-debug.log*
+
+# ===== TEST COVERAGE =====
+coverage/
+.nyc_output/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== TYPESCRIPT =====
+*.tsbuildinfo
+*.js.map
+*.d.ts.map

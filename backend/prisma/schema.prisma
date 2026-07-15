@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id            Int       @id @default(autoincrement())
+  name          String
+  activeModules String[]  @default([])
+  createdAt     DateTime  @default(now())
+  countries     Country[]
+  users         User[]
+}
+
+model Country {
+  id        Int        @id @default(autoincrement())
+  companyId Int
+  name      String
+  code      String
+  branches  Branch[]
+  company   Company    @relation(fields: [companyId], references: [id])
+  customers Customer[]
+  users     User[]
+}
+
+model Branch {
+  id              Int              @id @default(autoincrement())
+  countryId       Int
+  name            String
+  city            String?
+  country         Country          @relation(fields: [countryId], references: [id])
+  exportShipments ExportShipment[]
+  salesOrders     SalesOrder[]
+  users           User[]
+}
+
+model Role {
+  id              Int              @id @default(autoincrement())
+  name            String           @unique
+  rolePermissions RolePermission[]
+  users           User[]
+}
+
+model Permission {
+  id                      Int                      @id @default(autoincrement())
+  key                     String                   @unique
+  description             String?
+  rolePermissions         RolePermission[]
+  userPermissionOverrides UserPermissionOverride[]
+}
+
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  role         Role       @relation(fields: [roleId], references: [id])
+
+  @@unique([roleId, permissionId])
+}
+
+model User {
+  id                  Int                      @id @default(autoincrement())
+  companyId           Int
+  countryId           Int?
+  branchId            Int?
+  roleId              Int
+  name                String
+  email               String                   @unique
+  passwordHash        String
+  createdAt           DateTime                 @default(now())
+  attendanceRecords   Attendance[]
+  shipmentsCreated    ExportShipment[]         @relation("ShipmentCreatedBy")
+  salesOrdersCreated  SalesOrder[]             @relation("SalesCreatedBy")
+  branch              Branch?                  @relation(fields: [branchId], references: [id])
+  company             Company                  @relation(fields: [companyId], references: [id])
+  country             Country?                 @relation(fields: [countryId], references: [id])
+  role                Role                     @relation(fields: [roleId], references: [id])
+  permissionOverrides UserPermissionOverride[]
+}
+
+model UserPermissionOverride {
+  id           Int        @id @default(autoincrement())
+  userId       Int
+  permissionId Int
+  granted      Boolean
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@unique([userId, permissionId])
+}
+
+model Customer {
+  id          Int          @id @default(autoincrement())
+  countryId   Int
+  name        String
+  email       String?
+  phone       String?
+  country     Country      @relation(fields: [countryId], references: [id])
+  salesOrders SalesOrder[]
+}
+
+model SalesOrder {
+  id          Int              @id @default(autoincrement())
+  branchId    Int
+  customerId  Int
+  createdById Int
+  amount      Decimal          @db.Decimal(12, 2)
+  status      OrderStatus      @default(PENDING)
+  orderDate   DateTime         @default(now())
+  branch      Branch           @relation(fields: [branchId], references: [id])
+  createdBy   User             @relation("SalesCreatedBy", fields: [createdById], references: [id])
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  items       SalesOrderItem[]
+}
+
+model SalesOrderItem {
+  id          Int        @id @default(autoincrement())
+  orderId     Int
+  productName String
+  quantity    Int
+  unitPrice   Decimal    @db.Decimal(12, 2)
+  order       SalesOrder @relation(fields: [orderId], references: [id])
+}
+
+model ExportShipment {
+  id                   Int                  @id @default(autoincrement())
+  branchId             Int
+  originCountryId      Int
+  destinationCountry   String
+  createdById          Int
+  status               ShipmentStatus       @default(PACKED)
+  customsStatus        CustomsStatus        @default(PENDING)
+  shipmentDate         DateTime             @default(now())
+  expectedDeliveryDate DateTime?
+  branch               Branch               @relation(fields: [branchId], references: [id])
+  createdBy            User                 @relation("ShipmentCreatedBy", fields: [createdById], references: [id])
+  items                ExportShipmentItem[]
+}
+
+model ExportShipmentItem {
+  id          Int            @id @default(autoincrement())
+  shipmentId  Int
+  productName String
+  quantity    Int
+  value       Decimal        @db.Decimal(12, 2)
+  shipment    ExportShipment @relation(fields: [shipmentId], references: [id])
+}
+
+model Attendance {
+  id       Int              @id @default(autoincrement())
+  userId   Int
+  date     DateTime
+  status   AttendanceStatus
+  checkIn  DateTime?
+  checkOut DateTime?
+  user     User             @relation(fields: [userId], references: [id])
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ShipmentStatus {
+  PACKED
+  SHIPPED
+  IN_CUSTOMS
+  DELIVERED
+}
+
+enum CustomsStatus {
+  PENDING
+  CLEARED
+  HELD
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+}

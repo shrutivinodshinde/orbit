@@ -1,0 +1,36 @@
+# ===== ENVIRONMENT FILES — NEVER COMMIT =====
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# ===== DEPENDENCIES =====
+node_modules/
+
+# ===== BUILD OUTPUT — auto-generated, never commit =====
+dist/
+build/
+
+# ===== FIREBASE =====
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+.firebaserc.local
+
+# ===== LOGS =====
+*.log
+npm-debug.log*
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== VITE =====
+*.local
