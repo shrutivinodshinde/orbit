@@ -35,11 +35,20 @@ export default function PermissionPanel({ userId, onClose }: Props) {
 
       // Merge all known permissions into one unified list
       const allKeys = new Set([...perms.roleDefaults.map((p: any) => p.key), ...perms.overrides.map((o: any) => o.key)]);
-      const allPermissions = [...allKeys].map((key, idx) => ({
-        id: perms.roleDefaults.find((p: any) => p.key === key)?.id ?? perms.overrides.find((o: any) => o.key === key)?.id ?? idx,
+      const allPermissions: PermissionState[] = [...allKeys].map((key, idx) => ({
+        id:
+          perms.roleDefaults.find((p: any) => p.key === key)?.id ??
+          perms.overrides.find((o: any) => o.key === key)?.id ??
+          idx,
+      
         key,
+      
         isDefault: defaultKeys.has(key),
-        override: overrideMap.has(key) ? overrideMap.get(key)! : null,
+      
+        override: overrideMap.has(key)
+          ? (overrideMap.get(key) as boolean)
+          : null,
+      
         effective: effectiveSet.has(key),
       }));
 
