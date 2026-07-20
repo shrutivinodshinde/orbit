@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import { ConfigService } from '@nestjs/config';
 import { ChatHistory } from './schemas/chat-history.schema';
 import { AI_TOOLS } from './ai-tools';
@@ -15,9 +15,13 @@ const SYSTEM_PROMPT = `You are Orbit's AI business assistant. You help users und
 Always use the provided tools to fetch real data before answering questions about numbers, statuses, or records — never guess or make up figures.
 Keep answers concise and business-focused. If the user asks about data outside the available tools, say so honestly.`;
 
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+type ChatMsg = Groq.Chat.Completions.ChatCompletionMessageParam;
+
 @Injectable()
 export class AiAgentService {
-  private readonly anthropic: Anthropic;
+  private readonly groq: Groq;
 
   constructor(
     @InjectModel(ChatHistory.name) private readonly chatHistoryModel: Model<ChatHistory>,
@@ -27,7 +31,7 @@ export class AiAgentService {
     private readonly exportService: ExportService,
     private readonly attendanceService: AttendanceService,
   ) {
-    this.anthropic = new Anthropic({ apiKey: this.configService.get<string>('ANTHROPIC_API_KEY') });
+    this.groq = new Groq({ apiKey: this.configService.get<string>('GROQ_API_KEY') });
   }
 
   async chat(user: JwtPayload, message: string) {
@@ -36,8 +40,12 @@ export class AiAgentService {
     }
 
     const history = await this.getOrCreateHistory(user.sub);
-    const messages: Anthropic.MessageParam[] = history.messages.map((m) => ({ role: m.role, content: m.content }));
-    messages.push({ role: 'user', content: message });
+
+    const messages: ChatMsg[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history.messages.map((m) => ({ role: m.role, content: m.content }) as ChatMsg),
+      { role: 'user', content: message },
+    ];
 
     const finalText = await this.runConversationLoop(user, messages);
 
@@ -48,41 +56,55 @@ export class AiAgentService {
     return { reply: finalText };
   }
 
-  private async runConversationLoop(user: JwtPayload, messages: Anthropic.MessageParam[]): Promise<string> {
-    let response = await this.anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+  private async runConversationLoop(user: JwtPayload, messages: ChatMsg[]): Promise<string> {
+    let response = await this.groq.chat.completions.create({
+      model: GROQ_MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
       tools: AI_TOOLS,
       messages,
     });
 
-    // Loop while Claude wants to call tools, feeding results back in, until it gives a final text answer
-    while (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+    let choice = response.choices[0];
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
-        toolUseBlocks.map(async (block) => ({
-          type: 'tool_result' as const,
-          tool_use_id: block.id,
-          content: JSON.stringify(await this.executeTool(user, block.name, block.input as Record<string, unknown>)),
-        })),
-      );
+    // Loop while Groq wants to call tools, feeding results back in, until it gives a final text answer
+    while (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+      const toolCalls = choice.message.tool_calls;
 
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
+      // Push the assistant's tool-call message back into history exactly as returned
+      messages.push({
+        role: 'assistant',
+        content: choice.message.content ?? null,
+        tool_calls: toolCalls,
+      });
 
-      response = await this.anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+      // Execute each requested tool, then push one 'tool' role message per call
+      for (const call of toolCalls) {
+        let input: Record<string, unknown> = {};
+        try {
+          input = JSON.parse(call.function.arguments || '{}');
+        } catch {
+          input = {};
+        }
+
+        const result = await this.executeTool(user, call.function.name, input);
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
+      }
+
+      response = await this.groq.chat.completions.create({
+        model: GROQ_MODEL,
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
         tools: AI_TOOLS,
         messages,
       });
+      choice = response.choices[0];
     }
 
-    const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
-    return textBlock?.text ?? 'I was unable to generate a response.';
+    return choice.message.content ?? 'I was unable to generate a response.';
   }
 
   /** Routes each tool call through the SAME scoped services used by the REST API — the AI can never see more than the user could. */
