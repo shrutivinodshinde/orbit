@@ -50,7 +50,7 @@ jobs:
         run: |
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}")
-          if [ "$RESPONSE" != "200" ] && [ "$RESPONSE" != "201" ]; then
+          if [ "$RESPONSE" != "200" ] && [ "$RESPONSE" != "201" ] && [ "$RESPONSE" != "202" ]; then
             echo "Render deploy failed with status $RESPONSE"
             exit 1
           fi
